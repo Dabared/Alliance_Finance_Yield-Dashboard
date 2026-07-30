@@ -166,7 +166,7 @@ if stock_file and arr_file:
     # Show Summary Metrics for the exact slice of data they filtered
     tot_bal = grouped["Total_Opening_Bal"].sum()
     tot_int = grouped["Total_Int"].sum()
-    overall_yield = round(tot_int / tot_bal * 12 * 100, 2) if tot_bal > 0 else 0
+    overall_yield = round(tot_int / tot_bal * 12 * 100, 2) if tot_bal > 0 else 0.0
 
     mc1, mc2, mc3 = st.columns(3)
     mc1.metric("Filtered Portfolio Balance", f"Rs {tot_bal:,.2f}")
@@ -197,33 +197,40 @@ if stock_file and arr_file:
     st.pyplot(fig)
 
     # ==========================================
-    # 4) UI: WHAT-IF CALCULATOR (Tabs Added)
+    # 4) UI: WHAT-IF CALCULATOR (Auto-Populating)
     # ==========================================
     st.divider()
     st.header("3. Next-Month Investment Target")
-    st.markdown("Calculate either the required capital injection **OR** the required new business rate to hit your target yield.")
+    st.markdown("Calculate either the required capital injection **OR** the required new business rate to hit your target yield. *(These fields are auto-populated based on your filters above!)*")
     
     tab1, tab2 = st.tabs(["📊 Calculate Required Disbursement", "📈 Calculate Required Rate (IRR)"])
+    
+    # Use standard float types for the auto-populated variables
+    auto_bal = float(tot_bal)
+    auto_yield = float(overall_yield)
     
     # --- TAB 1: Solve for Disbursement (Cn) ---
     with tab1:
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            C0_1 = st.number_input("Current Outstanding (Rs)", value=1000000.0, step=10000.0, key="c0_1")
+            C0_1 = st.number_input("Current Outstanding (Rs)", value=auto_bal, step=10000.0, key="c0_1")
         with c2:
-            Y0_1 = st.number_input("Current Yield %", value=15.0, key="y0_1")
+            Y0_1 = st.number_input("Current Yield %", value=auto_yield, key="y0_1")
         with c3:
-            Yt_1 = st.number_input("Target Yield %", value=18.0, key="yt_1")
+            # We set the target to be slightly higher than current yield as a default suggestion
+            Yt_1 = st.number_input("Target Yield %", value=auto_yield + 1.0, key="yt_1")
         with c4:
             Rn_1 = st.number_input("New Business Rate %", value=24.0, key="rn_1")
 
         if st.button("Calculate Disbursement Requirement", type="primary", key="btn1"):
             if Yt_1 == Rn_1:
                 st.error("Target Yield cannot equal the New Business Rate.")
+            elif C0_1 == 0:
+                st.warning("Current Outstanding is 0. Please select a valid branch/product combination or input a balance.")
             else:
                 Cn = C0_1 * (Y0_1 - Yt_1) / (Yt_1 - Rn_1)
                 if Cn < 0:
-                    st.warning("Target unreachable by adding capital at this rate alone.")
+                    st.warning("Target unreachable by adding capital at this rate alone. You may need to change the target yield or the new business rate.")
                 else:
                     col_res1, col_res2 = st.columns(2)
                     col_res1.metric("Required New Disbursement", f"Rs {Cn:,.2f}")
@@ -233,11 +240,11 @@ if stock_file and arr_file:
     with tab2:
         t2_c1, t2_c2, t2_c3, t2_c4 = st.columns(4)
         with t2_c1:
-            C0_2 = st.number_input("Current Outstanding (Rs)", value=1000000.0, step=10000.0, key="c0_2")
+            C0_2 = st.number_input("Current Outstanding (Rs)", value=auto_bal, step=10000.0, key="c0_2")
         with t2_c2:
-            Y0_2 = st.number_input("Current Yield %", value=15.0, key="y0_2")
+            Y0_2 = st.number_input("Current Yield %", value=auto_yield, key="y0_2")
         with t2_c3:
-            Yt_2 = st.number_input("Target Yield %", value=18.0, key="yt_2")
+            Yt_2 = st.number_input("Target Yield %", value=auto_yield + 1.0, key="yt_2")
         with t2_c4:
             Cn_2 = st.number_input("New Disbursement (Rs)", value=500000.0, step=10000.0, key="cn_2")
 
