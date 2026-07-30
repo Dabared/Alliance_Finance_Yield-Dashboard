@@ -103,7 +103,6 @@ with st.sidebar:
     arr_file = st.file_uploader("Arrears Report (CSV/Excel)", type=["csv", "xlsx", "xls"])
 
 if stock_file and arr_file:
-    # Process data only once thanks to @st.cache_data
     with st.spinner("Processing portfolios..."):
         yield_tbl = process_data(stock_file.getvalue(), arr_file.getvalue(), arr_file.name)
     
@@ -153,33 +152,60 @@ if stock_file and arr_file:
     st.pyplot(fig)
 
     # ==========================================
-    # 4) UI: WHAT-IF CALCULATOR
+    # 4) UI: WHAT-IF CALCULATOR (Tabs Added)
     # ==========================================
     st.divider()
     st.header("3. Next-Month Investment Target")
-    st.markdown("Calculate the required capital injection to shift the blended yield.")
+    st.markdown("Calculate either the required capital injection **OR** the required new business rate to hit your target yield.")
     
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        C0 = st.number_input("Current Outstanding (Rs)", value=1000000.0, step=10000.0)
-    with c2:
-        Y0 = st.number_input("Current Yield %", value=15.0)
-    with c3:
-        Yt = st.number_input("Target Yield %", value=18.0)
-    with c4:
-        Rn = st.number_input("New Business Rate %", value=24.0)
+    tab1, tab2 = st.tabs(["📊 Calculate Required Disbursement", "📈 Calculate Required Rate (IRR)"])
+    
+    # --- TAB 1: Solve for Disbursement (Cn) ---
+    with tab1:
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            C0_1 = st.number_input("Current Outstanding (Rs)", value=1000000.0, step=10000.0, key="c0_1")
+        with c2:
+            Y0_1 = st.number_input("Current Yield %", value=15.0, key="y0_1")
+        with c3:
+            Yt_1 = st.number_input("Target Yield %", value=18.0, key="yt_1")
+        with c4:
+            Rn_1 = st.number_input("New Business Rate %", value=24.0, key="rn_1")
 
-    if st.button("Calculate Requirement", type="primary"):
-        if Yt == Rn:
-            st.error("Target Yield cannot equal the New Business Rate.")
-        else:
-            Cn = C0 * (Y0 - Yt) / (Yt - Rn)
-            if Cn < 0:
-                st.warning("Target unreachable by adding capital at this rate alone.")
+        if st.button("Calculate Disbursement Requirement", type="primary", key="btn1"):
+            if Yt_1 == Rn_1:
+                st.error("Target Yield cannot equal the New Business Rate.")
             else:
-                col_res1, col_res2 = st.columns(2)
-                col_res1.metric("Required New Disbursement", f"Rs {Cn:,.2f}")
-                col_res2.metric("New Total Capital Base", f"Rs {(C0 + Cn):,.2f}")
+                Cn = C0_1 * (Y0_1 - Yt_1) / (Yt_1 - Rn_1)
+                if Cn < 0:
+                    st.warning("Target unreachable by adding capital at this rate alone.")
+                else:
+                    col_res1, col_res2 = st.columns(2)
+                    col_res1.metric("Required New Disbursement", f"Rs {Cn:,.2f}")
+                    col_res2.metric("New Total Capital Base", f"Rs {(C0_1 + Cn):,.2f}")
+
+    # --- TAB 2: Solve for Rate (Rn) ---
+    with tab2:
+        t2_c1, t2_c2, t2_c3, t2_c4 = st.columns(4)
+        with t2_c1:
+            C0_2 = st.number_input("Current Outstanding (Rs)", value=1000000.0, step=10000.0, key="c0_2")
+        with t2_c2:
+            Y0_2 = st.number_input("Current Yield %", value=15.0, key="y0_2")
+        with t2_c3:
+            Yt_2 = st.number_input("Target Yield %", value=18.0, key="yt_2")
+        with t2_c4:
+            Cn_2 = st.number_input("New Disbursement (Rs)", value=500000.0, step=10000.0, key="cn_2")
+
+        if st.button("Calculate Required Rate", type="primary", key="btn2"):
+            if Cn_2 <= 0:
+                st.error("New Disbursement amount must be greater than zero.")
+            else:
+                # Formula: Rn = (Yt * (C0 + Cn) - C0 * Y0) / Cn
+                Rn = (Yt_2 * (C0_2 + Cn_2) - (C0_2 * Y0_2)) / Cn_2
+                
+                col_res3, col_res4 = st.columns(2)
+                col_res3.metric("Required New Business Rate (IRR)", f"{Rn:,.2f}%")
+                col_res4.metric("New Total Capital Base", f"Rs {(C0_2 + Cn_2):,.2f}")
 
 else:
     st.info("👈 Please upload both reports in the sidebar to begin analysis.")
