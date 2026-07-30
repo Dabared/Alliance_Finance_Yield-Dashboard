@@ -32,14 +32,12 @@ def find_header_row(raw_bytes, marker):
 # ==========================================
 @st.cache_data
 def process_data(stock_bytes, arr_bytes, arr_name):
-    # --- Process Stock Depletion ---
     hdr = find_header_row(stock_bytes, "Year,Foracid")
     stock = pd.read_csv(io.BytesIO(stock_bytes), skiprows=hdr, low_memory=False)
     stock = stock[pd.to_numeric(stock["Year"], errors="coerce").notna()].copy()
     stock["Year"] = stock["Year"].astype(int)
     stock["Foracid"] = stock["Foracid"].astype("Int64")
 
-    # --- Process Arrears ---
     NEEDED_ARR_COLS = ["facility_no", "sol_id", "branch", "int_rate", "product"]
     is_excel = str(arr_name).lower().endswith((".xlsx", ".xls"))
 
@@ -56,7 +54,6 @@ def process_data(stock_bytes, arr_bytes, arr_name):
     arr = arr.rename(columns={"facility_no": "Foracid"})
     arr["Foracid"] = arr["Foracid"].astype("Int64")
 
-    # --- Calculate Yield ---
     all_years = sorted(stock["Year"].unique())
     full_periods = [(y, m) for y in all_years for m in MONTHS 
                     if not (y == START_YEAR and MONTHS.index(m) < start_idx)]
@@ -108,7 +105,6 @@ if stock_file and arr_file:
     
     st.success("Data loaded successfully!")
 
-    # Lists for dropdowns
     periods = ["All"] + PERIOD_LABELS
     branches = ["All"] + sorted(yield_tbl["branch"].dropna().unique().tolist())
     products = ["All"] + sorted(yield_tbl["product"].dropna().unique().tolist())
@@ -118,9 +114,7 @@ if stock_file and arr_file:
     # ==========================================
     st.header("2. Yield & Portfolio Analysis")
     
-    # Chart Filters
     col_p, col_b, col_pr = st.columns(3)
-    
     with col_p:
         sel_period = st.selectbox("Select Period (Chart)", periods, key="chart_period")
     with col_b:
@@ -133,7 +127,6 @@ if stock_file and arr_file:
                        ["Period (Time Trend)", "Branch (Comparison)", "Product (Comparison)"], 
                        horizontal=True, key="chart_groupby")
 
-    # Chart Data Filtering
     df = yield_tbl.copy()
     if sel_period != "All":
         df = df[df["Period"] == sel_period]
@@ -189,13 +182,12 @@ if stock_file and arr_file:
     st.pyplot(fig)
 
     # ==========================================
-    # 4) UI: WHAT-IF CALCULATOR (Independent Filters)
+    # 4) UI: WHAT-IF CALCULATOR & DEPLETION
     # ==========================================
     st.divider()
-    st.header("3. Next-Month Investment Target")
-    st.markdown("Select a specific portfolio slice here to auto-populate the calculator. This operates independently from the charts above.")
+    st.header("3. Next-Month Growth & Pricing Target")
+    st.markdown("Project natural depletion, early settlements, and calculate the required pricing on your target investment to grow the portfolio yield.")
     
-    # Calculator specific filters
     calc_c1, calc_c2, calc_c3 = st.columns(3)
     with calc_c1:
         calc_period = st.selectbox("Target Period", periods, key="calc_period_dropdown")
@@ -204,7 +196,7 @@ if stock_file and arr_file:
     with calc_c3:
         calc_product = st.selectbox("Target Product", products, key="calc_product_dropdown")
 
-    # Filter data specifically for the calculator
+    # Get Current Balance & Yield
     calc_df = yield_tbl.copy()
     if calc_period != "All":
         calc_df = calc_df[calc_df["Period"] == calc_period]
@@ -217,67 +209,76 @@ if stock_file and arr_file:
     calc_tot_int = calc_df["Total_Int"].sum()
     calc_overall_yield = round(calc_tot_int / calc_tot_bal * 12 * 100, 2) if calc_tot_bal > 0 else 0.0
 
-    auto_bal = float(calc_tot_bal)
-    auto_yield = float(calc_overall_yield)
-    
-    # Generate a unique state key based on current selections
-    s_key = f"{calc_period}_{calc_branch}_{calc_product}"
-    
-    tab1, tab2 = st.tabs(["📊 Calculate Required Disbursement", "📈 Calculate Required Rate (IRR)"])
-    
-    # --- TAB 1: Solve for Disbursement (Cn) ---
-    with tab1:
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            C0_1 = st.number_input("Current Outstanding (Rs)", value=auto_bal, step=10000.0, key=f"t1_c0_{s_key}")
-        with c2:
-            Y0_1 = st.number_input("Current Yield %", value=auto_yield, key=f"t1_y0_{s_key}")
-        with c3:
-            Yt_1 = st.number_input("Target Yield %", value=auto_yield + 1.0, key=f"t1_yt_{s_key}")
-        with c4:
-            Rn_1 = st.number_input("New Business Rate %", value=24.0, key=f"t1_rn_{s_key}")
-
-        if st.button("Calculate Disbursement Requirement", type="primary", key=f"t1_btn_{s_key}"):
-            if Yt_1 == Rn_1:
-                st.error("Target Yield cannot equal the New Business Rate.")
-            elif C0_1 == 0:
-                st.warning("Current Outstanding is 0. Please select a valid branch/product combination.")
-            else:
-                Cn = C0_1 * (Y0_1 - Yt_1) / (Yt_1 - Rn_1)
-                if Cn < 0:
-                    st.warning("Target unreachable by adding capital at this rate alone.")
-                else:
-                    col_res1, col_res2 = st.columns(2)
-                    col_res1.metric("Required New Disbursement", f"Rs {Cn:,.2f}")
-                    col_res2.metric("New Total Capital Base", f"Rs {(C0_1 + Cn):,.2f}")
-
-    # --- TAB 2: Solve for Rate (Rn) ---
-    with tab2:
-        t2_c1, t2_c2, t2_c3, t2_c4 = st.columns(4)
-        with t2_c1:
-            C0_2 = st.number_input("Current Outstanding (Rs)", value=auto_bal, step=10000.0, key=f"t2_c0_{s_key}")
-        with t2_c2:
-            Y0_2 = st.number_input("Current Yield %", value=auto_yield, key=f"t2_y0_{s_key}")
-        with t2_c3:
-            Yt_2 = st.number_input("Target Yield %", value=auto_yield + 1.0, key=f"t2_yt_{s_key}")
-        with t2_c4:
-            Cn_2 = st.number_input("New Disbursement (Rs)", value=500000.0, step=10000.0, key=f"t2_cn_{s_key}")
-
-        if st.button("Calculate Required Rate", type="primary", key=f"t2_btn_{s_key}"):
-            if Cn_2 <= 0:
-                st.error("New Disbursement amount must be greater than zero.")
-            elif C0_2 == 0:
-                st.warning("Current Outstanding is 0. Please select a valid branch/product combination.")
-            else:
-                Rn = (Yt_2 * (C0_2 + Cn_2) - (C0_2 * Y0_2)) / Cn_2
+    # Calculate Natural Depletion (Open Cap current - Next Period Cap)
+    natural_depletion = 0.0
+    if calc_period == "All":
+        st.info("💡 To calculate Natural Depletion, please select a specific Target Period (e.g., '2026 July') instead of 'All'.")
+    elif calc_tot_bal > 0:
+        try:
+            curr_idx = PERIOD_LABELS.index(calc_period)
+            if curr_idx < len(PERIOD_LABELS) - 1:
+                next_period = PERIOD_LABELS[curr_idx + 1]
                 
-                col_res3, col_res4 = st.columns(2)
-                col_res3.metric("Required New Business Rate (IRR)", f"{Rn:,.2f}%")
-                col_res4.metric("New Total Capital Base", f"Rs {(C0_2 + Cn_2):,.2f}")
+                next_df = yield_tbl.copy()
+                next_df = next_df[next_df["Period"] == next_period]
+                if calc_branch != "All":
+                    next_df = next_df[next_df["branch"] == calc_branch]
+                if calc_product != "All":
+                    next_df = next_df[next_df["product"] == calc_product]
+                    
+                next_bal = next_df["Total_Opening_Bal"].sum()
+                natural_depletion = calc_tot_bal - next_bal
+            else:
+                natural_depletion = calc_tot_bal # If it's the last month in the window, everything depletes
+        except ValueError:
+            pass
+
+    # --- STEP 1: DEPLETION PROJECTION ---
+    st.write("### Step 1: Portfolio Depletion Projection")
+    
+    d_col1, d_col2, d_col3, d_col4, d_col5 = st.columns(5)
+    with d_col1:
+        st.metric("Opening Cap Balance", f"Rs {calc_tot_bal:,.2f}")
+    with d_col2:
+        st.metric("Natural Depletion", f"Rs {natural_depletion:,.2f}")
+    with d_col3:
+        es_pct = st.number_input("Early Settlement %", min_value=0.0, max_value=100.0, value=2.0, step=0.1)
+    with d_col4:
+        es_cap = calc_tot_bal * (es_pct / 100.0)
+        st.metric("Early Settlement Cap", f"Rs {es_cap:,.2f}")
+    with d_col5:
+        total_depletion = natural_depletion + es_cap
+        st.metric("Total Depletion", f"Rs {total_depletion:,.2f}")
+
+    st.write("---")
+
+    # --- STEP 2: GROWTH & PRICING TARGET ---
+    st.write("### Step 2: Growth Strategy & Required IRR")
+    
+    t_col1, t_col2, t_col3, t_col4 = st.columns(4)
+    with t_col1:
+        target_investment = st.number_input("Target Investment (New Disbursement Rs)", min_value=0.0, value=500000.0, step=50000.0)
+    with t_col2:
+        portfolio_growth = target_investment - total_depletion
+        if portfolio_growth >= 0:
+            st.metric("Portfolio Growth", f"Rs {portfolio_growth:,.2f}", delta="Positive Growth")
+        else:
+            st.metric("Portfolio Growth", f"Rs {portfolio_growth:,.2f}", delta="Negative Growth", delta_color="inverse")
+    with t_col3:
+        st.metric("Current Yield %", f"{calc_overall_yield}%")
+        target_yield = st.number_input("Target Yield %", value=calc_overall_yield + 1.0, step=0.1)
+    with t_col4:
+        if st.button("Calculate Required Rate", type="primary", use_container_width=True):
+            if target_investment <= 0:
+                st.error("Target Investment must be greater than zero.")
+            elif calc_tot_bal == 0:
+                st.warning("Opening Balance is 0. Please select a valid branch/product.")
+            else:
+                Rn = (target_yield * (calc_tot_bal + target_investment) - (calc_tot_bal * calc_overall_yield)) / target_investment
+                st.metric("Required New Business Rate (IRR)", f"{Rn:,.2f}%")
                 
-                # Sanity Check Warning
                 if Rn > 100:
-                    st.warning(f"⚠️ Note: The required rate is extremely high ({Rn:,.2f}%) because your New Disbursement (Rs {Cn_2:,.2f}) is too small compared to the massive size of the Current Outstanding portfolio (Rs {C0_2:,.2f}). To move the needle on a portfolio that size by {Yt_2 - Y0_2:.2f}%, you need a significantly larger disbursement volume.")
+                    st.warning(f"⚠️ Note: The required rate is extremely high ({Rn:,.2f}%) because your Target Investment (Rs {target_investment:,.2f}) is too small compared to the size of the Opening Balance (Rs {calc_tot_bal:,.2f}). To raise the blended yield by {target_yield - calc_overall_yield:.2f}%, you need a larger investment volume.")
 
 else:
     st.info("👈 Please upload both reports in the sidebar to begin analysis.")
