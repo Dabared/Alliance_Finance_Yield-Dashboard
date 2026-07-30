@@ -122,16 +122,16 @@ if stock_file and arr_file:
     col_p, col_b, col_pr = st.columns(3)
     
     with col_p:
-        sel_period = st.selectbox("Select Period (Chart)", periods)
+        sel_period = st.selectbox("Select Period (Chart)", periods, key="chart_period")
     with col_b:
-        sel_branch = st.selectbox("Select Branch (Chart)", branches)
+        sel_branch = st.selectbox("Select Branch (Chart)", branches, key="chart_branch")
     with col_pr:
-        sel_product = st.selectbox("Select Product (Chart)", products)
+        sel_product = st.selectbox("Select Product (Chart)", products, key="chart_product")
 
     st.write("---")
     view_by = st.radio("Analyze / Group by:", 
                        ["Period (Time Trend)", "Branch (Comparison)", "Product (Comparison)"], 
-                       horizontal=True)
+                       horizontal=True, key="chart_groupby")
 
     # Chart Data Filtering
     df = yield_tbl.copy()
@@ -198,11 +198,11 @@ if stock_file and arr_file:
     # Calculator specific filters
     calc_c1, calc_c2, calc_c3 = st.columns(3)
     with calc_c1:
-        calc_period = st.selectbox("Target Period", periods, key="calc_p")
+        calc_period = st.selectbox("Target Period", periods, key="calc_period_dropdown")
     with calc_c2:
-        calc_branch = st.selectbox("Target Branch", branches, key="calc_b")
+        calc_branch = st.selectbox("Target Branch", branches, key="calc_branch_dropdown")
     with calc_c3:
-        calc_product = st.selectbox("Target Product", products, key="calc_pr")
+        calc_product = st.selectbox("Target Product", products, key="calc_product_dropdown")
 
     # Filter data specifically for the calculator
     calc_df = yield_tbl.copy()
@@ -220,22 +220,24 @@ if stock_file and arr_file:
     auto_bal = float(calc_tot_bal)
     auto_yield = float(calc_overall_yield)
     
+    # Generate a unique state key based on current selections
+    s_key = f"{calc_period}_{calc_branch}_{calc_product}"
+    
     tab1, tab2 = st.tabs(["📊 Calculate Required Disbursement", "📈 Calculate Required Rate (IRR)"])
     
     # --- TAB 1: Solve for Disbursement (Cn) ---
-    # NOTE: Keys removed from dynamic inputs so Streamlit allows auto-updating when filters change!
     with tab1:
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            C0_1 = st.number_input("Current Outstanding (Rs)", value=auto_bal, step=10000.0)
+            C0_1 = st.number_input("Current Outstanding (Rs)", value=auto_bal, step=10000.0, key=f"t1_c0_{s_key}")
         with c2:
-            Y0_1 = st.number_input("Current Yield %", value=auto_yield)
+            Y0_1 = st.number_input("Current Yield %", value=auto_yield, key=f"t1_y0_{s_key}")
         with c3:
-            Yt_1 = st.number_input("Target Yield %", value=auto_yield + 1.0)
+            Yt_1 = st.number_input("Target Yield %", value=auto_yield + 1.0, key=f"t1_yt_{s_key}")
         with c4:
-            Rn_1 = st.number_input("New Business Rate %", value=24.0, key="rn_1")
+            Rn_1 = st.number_input("New Business Rate %", value=24.0, key=f"t1_rn_{s_key}")
 
-        if st.button("Calculate Disbursement Requirement", type="primary", key="btn1"):
+        if st.button("Calculate Disbursement Requirement", type="primary", key=f"t1_btn_{s_key}"):
             if Yt_1 == Rn_1:
                 st.error("Target Yield cannot equal the New Business Rate.")
             elif C0_1 == 0:
@@ -250,19 +252,18 @@ if stock_file and arr_file:
                     col_res2.metric("New Total Capital Base", f"Rs {(C0_1 + Cn):,.2f}")
 
     # --- TAB 2: Solve for Rate (Rn) ---
-    # NOTE: Keys removed from dynamic inputs so Streamlit allows auto-updating when filters change!
     with tab2:
         t2_c1, t2_c2, t2_c3, t2_c4 = st.columns(4)
         with t2_c1:
-            C0_2 = st.number_input("Current Outstanding (Rs)", value=auto_bal, step=10000.0)
+            C0_2 = st.number_input("Current Outstanding (Rs)", value=auto_bal, step=10000.0, key=f"t2_c0_{s_key}")
         with t2_c2:
-            Y0_2 = st.number_input("Current Yield %", value=auto_yield)
+            Y0_2 = st.number_input("Current Yield %", value=auto_yield, key=f"t2_y0_{s_key}")
         with t2_c3:
-            Yt_2 = st.number_input("Target Yield %", value=auto_yield + 1.0)
+            Yt_2 = st.number_input("Target Yield %", value=auto_yield + 1.0, key=f"t2_yt_{s_key}")
         with t2_c4:
-            Cn_2 = st.number_input("New Disbursement (Rs)", value=500000.0, step=10000.0, key="cn_2")
+            Cn_2 = st.number_input("New Disbursement (Rs)", value=500000.0, step=10000.0, key=f"t2_cn_{s_key}")
 
-        if st.button("Calculate Required Rate", type="primary", key="btn2"):
+        if st.button("Calculate Required Rate", type="primary", key=f"t2_btn_{s_key}"):
             if Cn_2 <= 0:
                 st.error("New Disbursement amount must be greater than zero.")
             elif C0_2 == 0:
