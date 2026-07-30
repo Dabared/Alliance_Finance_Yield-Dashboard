@@ -108,32 +108,32 @@ if stock_file and arr_file:
     
     st.success("Data loaded successfully!")
 
+    # Lists for dropdowns
+    periods = ["All"] + PERIOD_LABELS
+    branches = ["All"] + sorted(yield_tbl["branch"].dropna().unique().tolist())
+    products = ["All"] + sorted(yield_tbl["product"].dropna().unique().tolist())
+
     # ==========================================
     # 3) UI: DASHBOARD & ANALYSIS
     # ==========================================
     st.header("2. Yield & Portfolio Analysis")
     
-    # 3-Way Filters
+    # Chart Filters
     col_p, col_b, col_pr = st.columns(3)
-    periods = ["All"] + PERIOD_LABELS
-    branches = ["All"] + sorted(yield_tbl["branch"].dropna().unique().tolist())
-    products = ["All"] + sorted(yield_tbl["product"].dropna().unique().tolist())
     
     with col_p:
-        sel_period = st.selectbox("Select Period", periods)
+        sel_period = st.selectbox("Select Period (Chart)", periods)
     with col_b:
-        sel_branch = st.selectbox("Select Branch", branches)
+        sel_branch = st.selectbox("Select Branch (Chart)", branches)
     with col_pr:
-        sel_product = st.selectbox("Select Product", products)
+        sel_product = st.selectbox("Select Product (Chart)", products)
 
     st.write("---")
-    
-    # Toggle for what to show on the X-Axis
     view_by = st.radio("Analyze / Group by:", 
                        ["Period (Time Trend)", "Branch (Comparison)", "Product (Comparison)"], 
                        horizontal=True)
 
-    # Apply Filters to Dataframe
+    # Chart Data Filtering
     df = yield_tbl.copy()
     if sel_period != "All":
         df = df[df["Period"] == sel_period]
@@ -142,7 +142,6 @@ if stock_file and arr_file:
     if sel_product != "All":
         df = df[df["product"] == sel_product]
 
-    # Map the radio button choice to the actual dataframe column name
     if "Period" in view_by:
         group_col = "Period"
     elif "Branch" in view_by:
@@ -150,7 +149,6 @@ if stock_file and arr_file:
     else:
         group_col = "product"
 
-    # Aggregate the filtered data based on the chosen grouping
     grouped = df.groupby(group_col, observed=True).apply(
         lambda g: pd.Series({
             "Total_Opening_Bal": g["Total_Opening_Bal"].sum(),
@@ -160,10 +158,8 @@ if stock_file and arr_file:
         })
     ).reset_index()
 
-    # Remove empty groups (e.g., branches with no balance in that specific month)
     grouped = grouped[grouped["Total_Opening_Bal"] > 0]
 
-    # Show Summary Metrics for the exact slice of data they filtered
     tot_bal = grouped["Total_Opening_Bal"].sum()
     tot_int = grouped["Total_Int"].sum()
     overall_yield = round(tot_int / tot_bal * 12 * 100, 2) if tot_bal > 0 else 0.0
@@ -175,15 +171,11 @@ if stock_file and arr_file:
 
     st.dataframe(grouped, use_container_width=True)
 
-    # Dynamic Chart Rendering (Line for Time, Bar for Categories)
     fig, ax = plt.subplots(figsize=(12, 5))
-    
     if group_col == "Period":
-        # Line chart for time series
         ax.plot(grouped[group_col].astype(str), grouped["Yield_pct"], marker="o", label="Real Yield %", color="#1f77b4")
         ax.plot(grouped[group_col].astype(str), grouped["Avg_Contract_Rate"], marker="s", linestyle="--", label="Avg Contract Rate %", color="#ff7f0e")
     else:
-        # Bar chart for category comparison
         x = np.arange(len(grouped))
         width = 0.35
         ax.bar(x - width/2, grouped["Yield_pct"], width, label="Real Yield %", color="#1f77b4")
@@ -197,17 +189,38 @@ if stock_file and arr_file:
     st.pyplot(fig)
 
     # ==========================================
-    # 4) UI: WHAT-IF CALCULATOR (Auto-Populating)
+    # 4) UI: WHAT-IF CALCULATOR (Independent Filters)
     # ==========================================
     st.divider()
     st.header("3. Next-Month Investment Target")
-    st.markdown("Calculate either the required capital injection **OR** the required new business rate to hit your target yield. *(These fields are auto-populated based on your filters above!)*")
+    st.markdown("Select a specific portfolio slice here to auto-populate the calculator. This operates independently from the charts above.")
+    
+    # Calculator specific filters
+    calc_c1, calc_c2, calc_c3 = st.columns(3)
+    with calc_c1:
+        calc_period = st.selectbox("Target Period", periods, key="calc_p")
+    with calc_c2:
+        calc_branch = st.selectbox("Target Branch", branches, key="calc_b")
+    with calc_c3:
+        calc_product = st.selectbox("Target Product", products, key="calc_pr")
+
+    # Filter data specifically for the calculator
+    calc_df = yield_tbl.copy()
+    if calc_period != "All":
+        calc_df = calc_df[calc_df["Period"] == calc_period]
+    if calc_branch != "All":
+        calc_df = calc_df[calc_df["branch"] == calc_branch]
+    if calc_product != "All":
+        calc_df = calc_df[calc_df["product"] == calc_product]
+
+    calc_tot_bal = calc_df["Total_Opening_Bal"].sum()
+    calc_tot_int = calc_df["Total_Int"].sum()
+    calc_overall_yield = round(calc_tot_int / calc_tot_bal * 12 * 100, 2) if calc_tot_bal > 0 else 0.0
+
+    auto_bal = float(calc_tot_bal)
+    auto_yield = float(calc_overall_yield)
     
     tab1, tab2 = st.tabs(["📊 Calculate Required Disbursement", "📈 Calculate Required Rate (IRR)"])
-    
-    # Use standard float types for the auto-populated variables
-    auto_bal = float(tot_bal)
-    auto_yield = float(overall_yield)
     
     # --- TAB 1: Solve for Disbursement (Cn) ---
     with tab1:
@@ -217,7 +230,6 @@ if stock_file and arr_file:
         with c2:
             Y0_1 = st.number_input("Current Yield %", value=auto_yield, key="y0_1")
         with c3:
-            # We set the target to be slightly higher than current yield as a default suggestion
             Yt_1 = st.number_input("Target Yield %", value=auto_yield + 1.0, key="yt_1")
         with c4:
             Rn_1 = st.number_input("New Business Rate %", value=24.0, key="rn_1")
@@ -226,11 +238,11 @@ if stock_file and arr_file:
             if Yt_1 == Rn_1:
                 st.error("Target Yield cannot equal the New Business Rate.")
             elif C0_1 == 0:
-                st.warning("Current Outstanding is 0. Please select a valid branch/product combination or input a balance.")
+                st.warning("Current Outstanding is 0. Please select a valid branch/product combination.")
             else:
                 Cn = C0_1 * (Y0_1 - Yt_1) / (Yt_1 - Rn_1)
                 if Cn < 0:
-                    st.warning("Target unreachable by adding capital at this rate alone. You may need to change the target yield or the new business rate.")
+                    st.warning("Target unreachable by adding capital at this rate alone.")
                 else:
                     col_res1, col_res2 = st.columns(2)
                     col_res1.metric("Required New Disbursement", f"Rs {Cn:,.2f}")
@@ -251,8 +263,9 @@ if stock_file and arr_file:
         if st.button("Calculate Required Rate", type="primary", key="btn2"):
             if Cn_2 <= 0:
                 st.error("New Disbursement amount must be greater than zero.")
+            elif C0_2 == 0:
+                st.warning("Current Outstanding is 0. Please select a valid branch/product combination.")
             else:
-                # Formula: Rn = (Yt * (C0 + Cn) - C0 * Y0) / Cn
                 Rn = (Yt_2 * (C0_2 + Cn_2) - (C0_2 * Y0_2)) / Cn_2
                 
                 col_res3, col_res4 = st.columns(2)
