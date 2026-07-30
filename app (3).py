@@ -209,7 +209,7 @@ if stock_file and arr_file:
     calc_tot_int = calc_df["Total_Int"].sum()
     calc_overall_yield = round(calc_tot_int / calc_tot_bal * 12 * 100, 2) if calc_tot_bal > 0 else 0.0
 
-    # Calculate Natural Depletion (Open Cap current - Next Period Cap)
+    # Calculate Natural Depletion
     natural_depletion = 0.0
     if calc_period == "All":
         st.info("💡 To calculate Natural Depletion, please select a specific Target Period (e.g., '2026 July') instead of 'All'.")
@@ -229,56 +229,81 @@ if stock_file and arr_file:
                 next_bal = next_df["Total_Opening_Bal"].sum()
                 natural_depletion = calc_tot_bal - next_bal
             else:
-                natural_depletion = calc_tot_bal # If it's the last month in the window, everything depletes
+                natural_depletion = calc_tot_bal 
         except ValueError:
             pass
 
     # --- STEP 1: DEPLETION PROJECTION ---
     st.write("### Step 1: Portfolio Depletion Projection")
     
-    d_col1, d_col2, d_col3, d_col4, d_col5 = st.columns(5)
-    with d_col1:
+    # Grid Row 1
+    r1_col1, r1_col2, r1_col3 = st.columns(3)
+    with r1_col1:
         st.metric("Opening Cap Balance", f"Rs {calc_tot_bal:,.2f}")
-    with d_col2:
+    with r1_col2:
         st.metric("Natural Depletion", f"Rs {natural_depletion:,.2f}")
-    with d_col3:
+    with r1_col3:
         es_pct = st.number_input("Early Settlement %", min_value=0.0, max_value=100.0, value=2.0, step=0.1)
-    with d_col4:
-        es_cap = calc_tot_bal * (es_pct / 100.0)
+
+    # Grid Row 2
+    r2_col1, r2_col2, r2_col3 = st.columns(3)
+    es_cap = calc_tot_bal * (es_pct / 100.0)
+    with r2_col1:
         st.metric("Early Settlement Cap", f"Rs {es_cap:,.2f}")
-    with d_col5:
+    with r2_col2:
         total_depletion = natural_depletion + es_cap
         st.metric("Total Depletion", f"Rs {total_depletion:,.2f}")
+    with r2_col3:
+        st.write("") # Blank space for alignment
 
     st.write("---")
 
     # --- STEP 2: GROWTH & PRICING TARGET ---
     st.write("### Step 2: Growth Strategy & Required IRR")
     
-    t_col1, t_col2, t_col3, t_col4 = st.columns(4)
-    with t_col1:
+    # Grid Row 3
+    r3_col1, r3_col2, r3_col3 = st.columns(3)
+    with r3_col1:
         target_investment = st.number_input("Target Investment (New Disbursement Rs)", min_value=0.0, value=500000.0, step=50000.0)
-    with t_col2:
+        # Formatted caption hack to show thousand separators under the input box
+        st.caption(f"**Value:** Rs {target_investment:,.2f}")
+    with r3_col2:
         portfolio_growth = target_investment - total_depletion
         if portfolio_growth >= 0:
             st.metric("Portfolio Growth", f"Rs {portfolio_growth:,.2f}", delta="Positive Growth")
         else:
             st.metric("Portfolio Growth", f"Rs {portfolio_growth:,.2f}", delta="Negative Growth", delta_color="inverse")
-    with t_col3:
+    with r3_col3:
         st.metric("Current Yield %", f"{calc_overall_yield}%")
+
+    # Grid Row 4
+    r4_col1, r4_col2, r4_col3 = st.columns(3)
+    with r4_col1:
         target_yield = st.number_input("Target Yield %", value=calc_overall_yield + 1.0, step=0.1)
-    with t_col4:
-        if st.button("Calculate Required Rate", type="primary", use_container_width=True):
-            if target_investment <= 0:
-                st.error("Target Investment must be greater than zero.")
-            elif calc_tot_bal == 0:
-                st.warning("Opening Balance is 0. Please select a valid branch/product.")
-            else:
-                Rn = (target_yield * (calc_tot_bal + target_investment) - (calc_tot_bal * calc_overall_yield)) / target_investment
+    with r4_col2:
+        st.write("") # Spacer
+        st.write("") # Spacer
+        calculate_btn = st.button("Calculate Required Rate", type="primary", use_container_width=True)
+    with r4_col3:
+        st.write("") # Spacer
+        
+    if calculate_btn:
+        if target_investment <= 0:
+            st.error("Target Investment must be greater than zero.")
+        elif calc_tot_bal == 0:
+            st.warning("Opening Balance is 0. Please select a valid branch/product.")
+        else:
+            Rn = (target_yield * (calc_tot_bal + target_investment) - (calc_tot_bal * calc_overall_yield)) / target_investment
+            
+            st.write("#### Result:")
+            result_c1, result_c2 = st.columns(2)
+            with result_c1:
                 st.metric("Required New Business Rate (IRR)", f"{Rn:,.2f}%")
-                
-                if Rn > 100:
-                    st.warning(f"⚠️ Note: The required rate is extremely high ({Rn:,.2f}%) because your Target Investment (Rs {target_investment:,.2f}) is too small compared to the size of the Opening Balance (Rs {calc_tot_bal:,.2f}). To raise the blended yield by {target_yield - calc_overall_yield:.2f}%, you need a larger investment volume.")
+            with result_c2:
+                st.metric("New Total Capital Base", f"Rs {(calc_tot_bal + target_investment):,.2f}")
+            
+            if Rn > 100:
+                st.warning(f"⚠️ Note: The required rate is extremely high ({Rn:,.2f}%) because your Target Investment (Rs {target_investment:,.2f}) is too small compared to the massive size of the Opening Balance (Rs {calc_tot_bal:,.2f}). To raise the blended yield by {target_yield - calc_overall_yield:.2f}%, you need a significantly larger investment volume.")
 
 else:
     st.info("👈 Please upload both reports in the sidebar to begin analysis.")
