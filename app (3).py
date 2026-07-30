@@ -111,26 +111,47 @@ if stock_file and arr_file:
     # ==========================================
     # 3) UI: DASHBOARD & ANALYSIS
     # ==========================================
-    st.header("2. Yield Trend Analysis")
+    st.header("2. Yield & Portfolio Analysis")
     
-    col1, col2 = st.columns(2)
+    # 3-Way Filters
+    col_p, col_b, col_pr = st.columns(3)
+    periods = ["All"] + PERIOD_LABELS
     branches = ["All"] + sorted(yield_tbl["branch"].dropna().unique().tolist())
     products = ["All"] + sorted(yield_tbl["product"].dropna().unique().tolist())
     
-    with col1:
+    with col_p:
+        sel_period = st.selectbox("Select Period", periods)
+    with col_b:
         sel_branch = st.selectbox("Select Branch", branches)
-    with col2:
+    with col_pr:
         sel_product = st.selectbox("Select Product", products)
 
-    # Filter logic
+    st.write("---")
+    
+    # Toggle for what to show on the X-Axis
+    view_by = st.radio("Analyze / Group by:", 
+                       ["Period (Time Trend)", "Branch (Comparison)", "Product (Comparison)"], 
+                       horizontal=True)
+
+    # Apply Filters to Dataframe
     df = yield_tbl.copy()
+    if sel_period != "All":
+        df = df[df["Period"] == sel_period]
     if sel_branch != "All":
         df = df[df["branch"] == sel_branch]
     if sel_product != "All":
         df = df[df["product"] == sel_product]
 
-    # Aggregate filtered data
-    trend = df.groupby("Period", observed=True).apply(
+    # Map the radio button choice to the actual dataframe column name
+    if "Period" in view_by:
+        group_col = "Period"
+    elif "Branch" in view_by:
+        group_col = "branch"
+    else:
+        group_col = "product"
+
+    # Aggregate the filtered data based on the chosen grouping
+    grouped = df.groupby(group_col, observed=True).apply(
         lambda g: pd.Series({
             "Total_Opening_Bal": g["Total_Opening_Bal"].sum(),
             "Total_Int": g["Total_Int"].sum(),
@@ -139,16 +160,40 @@ if stock_file and arr_file:
         })
     ).reset_index()
 
-    st.dataframe(trend, use_container_width=True)
+    # Remove empty groups (e.g., branches with no balance in that specific month)
+    grouped = grouped[grouped["Total_Opening_Bal"] > 0]
 
-    # Chart
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(trend["Period"], trend["Yield_pct"], marker="o", label="Real Yield %")
-    ax.plot(trend["Period"], trend["Avg_Contract_Rate"], marker="s", linestyle="--", label="Avg Contract Rate %")
-    ax.set_title(f"Yield Trend - Branch: {sel_branch} | Product: {sel_product}")
+    # Show Summary Metrics for the exact slice of data they filtered
+    tot_bal = grouped["Total_Opening_Bal"].sum()
+    tot_int = grouped["Total_Int"].sum()
+    overall_yield = round(tot_int / tot_bal * 12 * 100, 2) if tot_bal > 0 else 0
+
+    mc1, mc2, mc3 = st.columns(3)
+    mc1.metric("Filtered Portfolio Balance", f"Rs {tot_bal:,.2f}")
+    mc2.metric("Filtered Total Interest", f"Rs {tot_int:,.2f}")
+    mc3.metric("Blended Yield for Selection", f"{overall_yield}%")
+
+    st.dataframe(grouped, use_container_width=True)
+
+    # Dynamic Chart Rendering (Line for Time, Bar for Categories)
+    fig, ax = plt.subplots(figsize=(12, 5))
+    
+    if group_col == "Period":
+        # Line chart for time series
+        ax.plot(grouped[group_col].astype(str), grouped["Yield_pct"], marker="o", label="Real Yield %", color="#1f77b4")
+        ax.plot(grouped[group_col].astype(str), grouped["Avg_Contract_Rate"], marker="s", linestyle="--", label="Avg Contract Rate %", color="#ff7f0e")
+    else:
+        # Bar chart for category comparison
+        x = np.arange(len(grouped))
+        width = 0.35
+        ax.bar(x - width/2, grouped["Yield_pct"], width, label="Real Yield %", color="#1f77b4")
+        ax.bar(x + width/2, grouped["Avg_Contract_Rate"], width, label="Avg Contract Rate %", color="#ff7f0e")
+        ax.set_xticks(x)
+        ax.set_xticklabels(grouped[group_col].astype(str), rotation=45, ha="right")
+
+    ax.set_title(f"Yield Analysis by {group_col.capitalize()}")
     ax.set_ylabel("%")
     ax.legend()
-    plt.xticks(rotation=45, ha="right")
     st.pyplot(fig)
 
     # ==========================================
