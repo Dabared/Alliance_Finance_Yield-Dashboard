@@ -223,14 +223,15 @@ if stock_file and arr_file:
     tab1, tab2 = st.tabs(["📊 Calculate Required Disbursement", "📈 Calculate Required Rate (IRR)"])
     
     # --- TAB 1: Solve for Disbursement (Cn) ---
+    # NOTE: Keys removed from dynamic inputs so Streamlit allows auto-updating when filters change!
     with tab1:
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            C0_1 = st.number_input("Current Outstanding (Rs)", value=auto_bal, step=10000.0, key="c0_1")
+            C0_1 = st.number_input("Current Outstanding (Rs)", value=auto_bal, step=10000.0)
         with c2:
-            Y0_1 = st.number_input("Current Yield %", value=auto_yield, key="y0_1")
+            Y0_1 = st.number_input("Current Yield %", value=auto_yield)
         with c3:
-            Yt_1 = st.number_input("Target Yield %", value=auto_yield + 1.0, key="yt_1")
+            Yt_1 = st.number_input("Target Yield %", value=auto_yield + 1.0)
         with c4:
             Rn_1 = st.number_input("New Business Rate %", value=24.0, key="rn_1")
 
@@ -249,14 +250,15 @@ if stock_file and arr_file:
                     col_res2.metric("New Total Capital Base", f"Rs {(C0_1 + Cn):,.2f}")
 
     # --- TAB 2: Solve for Rate (Rn) ---
+    # NOTE: Keys removed from dynamic inputs so Streamlit allows auto-updating when filters change!
     with tab2:
         t2_c1, t2_c2, t2_c3, t2_c4 = st.columns(4)
         with t2_c1:
-            C0_2 = st.number_input("Current Outstanding (Rs)", value=auto_bal, step=10000.0, key="c0_2")
+            C0_2 = st.number_input("Current Outstanding (Rs)", value=auto_bal, step=10000.0)
         with t2_c2:
-            Y0_2 = st.number_input("Current Yield %", value=auto_yield, key="y0_2")
+            Y0_2 = st.number_input("Current Yield %", value=auto_yield)
         with t2_c3:
-            Yt_2 = st.number_input("Target Yield %", value=auto_yield + 1.0, key="yt_2")
+            Yt_2 = st.number_input("Target Yield %", value=auto_yield + 1.0)
         with t2_c4:
             Cn_2 = st.number_input("New Disbursement (Rs)", value=500000.0, step=10000.0, key="cn_2")
 
