@@ -274,6 +274,10 @@ if stock_file and arr_file:
                 col_res3, col_res4 = st.columns(2)
                 col_res3.metric("Required New Business Rate (IRR)", f"{Rn:,.2f}%")
                 col_res4.metric("New Total Capital Base", f"Rs {(C0_2 + Cn_2):,.2f}")
+                
+                # Sanity Check Warning
+                if Rn > 100:
+                    st.warning(f"⚠️ Note: The required rate is extremely high ({Rn:,.2f}%) because your New Disbursement (Rs {Cn_2:,.2f}) is too small compared to the massive size of the Current Outstanding portfolio (Rs {C0_2:,.2f}). To move the needle on a portfolio that size by {Yt_2 - Y0_2:.2f}%, you need a significantly larger disbursement volume.")
 
 else:
     st.info("👈 Please upload both reports in the sidebar to begin analysis.")
